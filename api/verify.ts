@@ -3,7 +3,7 @@ import { google } from 'googleapis';
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
-  process.env.SUPABASE_ANON_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
 const PACKAGE_NAME = process.env.GOOGLE_PLAY_PACKAGE_NAME!;
@@ -77,6 +77,13 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    if (user.is_premium) {
+      return res.status(200).json({
+        ok: true,
+        isPremium: true,
+      });
+    }
+
     const publisher = await getAndroidPublisher();
 
     const purchase = await publisher.purchases.products.get({
@@ -95,16 +102,21 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Purchase is not completed' });
     }
 
-    if (data.consumptionState === 1) {
+    if (Number(data.consumptionState) === 1) {
       return res.status(400).json({ error: 'Purchase already consumed' });
     }
 
-    await supabase
+    const { error: updateError } = await supabase
       .from('users')
       .update({ is_premium: true })
       .eq('id', userId);
 
-    if (data.acknowledgementState === 0) {
+    if (updateError) {
+      console.error(updateError);
+      return res.status(500).json({ error: 'Failed to update premium status' });
+    }
+
+    if (Number(data.acknowledgementState) === 0) {
       await publisher.purchases.products.acknowledge({
         packageName: PACKAGE_NAME,
         productId,
