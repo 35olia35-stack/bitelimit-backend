@@ -6,7 +6,11 @@ const supabase = createClient(
 );
 
 export default async function handler(req, res) {
-  const { userId } = req.body;
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const userId = req.body?.userId;
 
   if (!userId) {
     return res.status(400).json({ error: 'No userId' });
@@ -16,7 +20,7 @@ export default async function handler(req, res) {
     .from('users')
     .select('*')
     .eq('id', userId)
-    .single();
+    .maybeSingle();
 
   if (!existing) {
     await supabase.from('users').insert({
