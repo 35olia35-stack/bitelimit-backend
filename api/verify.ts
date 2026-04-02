@@ -77,13 +77,6 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    if (user.is_premium) {
-      return res.status(200).json({
-        ok: true,
-        isPremium: true,
-      });
-    }
-
     const publisher = await getAndroidPublisher();
 
     const purchase = await publisher.purchases.products.get({
@@ -106,14 +99,49 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Purchase already consumed' });
     }
 
-    const { error: updateError } = await supabase
-      .from('users')
-      .update({ is_premium: true })
-      .eq('id', userId);
+    const googleOrderId = data.orderId || null;
 
-    if (updateError) {
-      console.error(updateError);
-      return res.status(500).json({ error: 'Failed to update premium status' });
+    const { data: existingPurchase, error: existingPurchaseError } = await supabase
+      .from('purchases')
+      .select('id, user_id')
+      .eq('purchase_token', purchaseToken)
+      .maybeSingle();
+
+    if (existingPurchaseError) {
+      console.error(existingPurchaseError);
+      return res.status(500).json({ error: 'Failed to check existing purchase' });
+    }
+
+    if (existingPurchase && existingPurchase.user_id !== userId) {
+      return res.status(409).json({ error: 'Purchase token already belongs to another user' });
+    }
+
+    if (!existingPurchase) {
+      const { error: insertPurchaseError } = await supabase
+        .from('purchases')
+        .insert({
+          user_id: userId,
+          product_id: productId,
+          purchase_token: purchaseToken,
+          order_id: googleOrderId,
+        });
+
+      if (insertPurchaseError) {
+        console.error(insertPurchaseError);
+        return res.status(500).json({ error: 'Failed to save purchase' });
+      }
+    }
+
+    if (!user.is_premium) {
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ is_premium: true })
+        .eq('id', userId);
+
+      if (updateError) {
+        console.error(updateError);
+        return res.status(500).json({ error: 'Failed to update premium status' });
+      }
     }
 
     if (Number(data.acknowledgementState) === 0) {
