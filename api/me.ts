@@ -29,7 +29,7 @@ export default async function handler(req, res) {
 
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, trial_start_at, is_premium')
+      .select('id, trial_start_at')
       .eq('id', userId)
       .maybeSingle();
 
@@ -50,7 +50,6 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       userId: user.id,
-      isPremium: user.is_premium,
       trialActive,
       trialDays: TRIAL_DAYS,
       daysPassed,
