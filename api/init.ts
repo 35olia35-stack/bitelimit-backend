@@ -42,7 +42,8 @@ export default async function handler(req, res) {
     userId = randomUUID();
 
     const { error: insertError } = await supabase.from('users').insert({
-      id: userId
+      id: userId,
+      trial_start_at: new Date().toISOString() // 👈 ВОТ ЭТО ГЛАВНОЕ
     });
 
     if (insertError) {
