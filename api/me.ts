@@ -5,7 +5,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const TRIAL_DAYS = 30;
+const TRIAL_DAYS = 10;
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
