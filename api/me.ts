@@ -10,7 +10,7 @@ const TRIAL_DAYS = 10;
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -21,19 +21,28 @@ export default async function handler(req, res) {
   }
 
   try {
-    const userId =
-      typeof req.body?.userId === 'string' && req.body.userId.trim()
-        ? req.body.userId.trim()
-        : null;
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7)
+      : null;
 
-    if (!userId) {
-      return res.status(400).json({ error: 'Missing userId' });
+    if (!token) {
+      return res.status(401).json({ error: 'Missing token' });
     }
+
+    const { data: authData, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !authData?.user) {
+      console.error(authError);
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    const authUser = authData.user;
 
     const { data: user, error } = await supabase
       .from('users')
       .select('id, trial_start_at')
-      .eq('id', userId)
+      .eq('id', authUser.id)
       .maybeSingle();
 
     if (error) {
@@ -53,6 +62,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       userId: user.id,
+      email: authUser.email ?? null,
       trialActive,
       trialDays: TRIAL_DAYS,
       daysPassed,
