@@ -37,6 +37,18 @@ export default async function handler(req, res) {
       if (existing) {
         return res.status(200).json({ userId });
       }
+
+      const { error: insertError } = await supabase.from('users').insert({
+        id: userId,
+        trial_start_at: new Date().toISOString()
+      });
+
+      if (insertError) {
+        console.error(insertError);
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      return res.status(200).json({ userId });
     }
 
     userId = randomUUID();
