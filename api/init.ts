@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -9,7 +8,7 @@ const supabase = createClient(
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -20,51 +19,51 @@ export default async function handler(req, res) {
   }
 
   try {
-    const requestedUserId =
-      typeof req.body?.userId === 'string' && req.body.userId.trim()
-        ? req.body.userId.trim()
-        : null;
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7)
+      : null;
 
-    if (requestedUserId) {
-      const { data: existing, error: selectError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('id', requestedUserId)
-        .maybeSingle();
-
-      if (selectError) {
-        console.error(selectError);
-        return res.status(500).json({ error: 'Database error' });
-      }
-
-      if (!existing) {
-        const { error: insertError } = await supabase.from('users').insert({
-          id: requestedUserId,
-          trial_start_at: new Date().toISOString(),
-        });
-
-        if (insertError) {
-          console.error(insertError);
-          return res.status(500).json({ error: 'Database error' });
-        }
-      }
-
-      return res.status(200).json({ userId: requestedUserId });
+    if (!token) {
+      return res.status(401).json({ error: 'Missing token' });
     }
 
-    const newUserId = randomUUID();
+    const { data: authData, error: authError } = await supabase.auth.getUser(token);
 
-    const { error: insertError } = await supabase.from('users').insert({
-      id: newUserId,
-      trial_start_at: new Date().toISOString(),
-    });
+    if (authError || !authData?.user) {
+      console.error(authError);
+      return res.status(401).json({ error: 'Invalid token' });
+    }
 
-    if (insertError) {
-      console.error(insertError);
+    const authUser = authData.user;
+
+    const { data: existing, error: selectError } = await supabase
+      .from('users')
+      .select('id, trial_start_at')
+      .eq('id', authUser.id)
+      .maybeSingle();
+
+    if (selectError) {
+      console.error(selectError);
       return res.status(500).json({ error: 'Database error' });
     }
 
-    return res.status(200).json({ userId: newUserId });
+    if (!existing) {
+      const { error: insertError } = await supabase.from('users').insert({
+        id: authUser.id,
+        trial_start_at: new Date().toISOString(),
+      });
+
+      if (insertError) {
+        console.error(insertError);
+        return res.status(500).json({ error: 'Database error' });
+      }
+    }
+
+    return res.status(200).json({
+      userId: authUser.id,
+      email: authUser.email ?? null,
+    });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: 'Server error' });
